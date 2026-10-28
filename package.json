@@ -1,0 +1,59 @@
+{
+  "name": "fastify_ts_server_template",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsup",
+    "start": "node dist/server.js",
+    "prisma:generate": "prisma generate --config src/config/prisma.config.ts",
+    "prisma:migrate": "prisma migrate dev --config src/config/prisma.config.ts",
+    "prisma:deploy": "prisma migrate deploy --config src/config/prisma.config.ts",
+    "prisma:studio": "prisma studio --config src/config/prisma.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "fastify",
+    "typescript",
+    "prisma",
+    "zod",
+    "postgresql",
+    "rest-api"
+  ],
+  "author": "",
+  "license": "ISC",
+  "description": "Production-ready Fastify TypeScript REST API server with Prisma and Zod",
+  "dependencies": {
+    "@fastify/cors": "^11.3.1",
+    "@fastify/helmet": "^13.2.0",
+    "@fastify/multipart": "^10.1.6",
+    "@fastify/rate-limit": "^11.2.1",
+    "@fastify/sensible": "^6.0.7",
+    "@fastify/swagger": "^9.9.2",
+    "@fastify/swagger-ui": "^6.1.2",
+    "@prisma/adapter-pg": "^7.10.1",
+    "@prisma/client": "^7.10.1",
+    "bcryptjs": "^3.0.3",
+    "dotenv": "^18.0.9",
+    "fastify": "^5.12.7",
+    "fastify-plugin": "^6.0.1",
+    "fastify-type-provider-zod": "^7.0.0",
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.23.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^26.6.5",
+    "@types/pg": "^8.23.1",
+    "eslint": "^10.13.0",
+    "prettier": "^3.9.10",
+    "prisma": "^7.10.1",
+    "tsup": "^8.5.1",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5"
+  }
+}
