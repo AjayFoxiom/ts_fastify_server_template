@@ -29,8 +29,8 @@ npm start                   # Run compiled production server (node dist/server.j
 npm run typecheck           # Check TypeScript types (tsc --noEmit)
 npm run lint                # Check code quality & dead code (ESLint 9+)
 npm run format              # Auto-format all files (Prettier)
-npm test                    # Run Jest integration tests
-npm run test:watch          # Run Jest in interactive watch mode
+npm test                    # Run Vitest integration tests
+npm run test:watch          # Run Vitest in interactive watch mode
 
 # ⚡ Generator & Process Management
 npm run gen:module <name>   # Scaffold new module in src/modules/<name>/
@@ -136,7 +136,7 @@ fastify_ts_server_template/
 ├── prisma.config.ts               # Root Prisma 7 configuration file
 ├── tsconfig.json                  # Strict TypeScript configuration
 ├── tsup.config.ts                 # Production bundle configuration
-└── jest.config.cjs                # Jest test configuration
+└── vitest.config.ts               # Vitest test configuration
 ```
 
 ---
@@ -281,8 +281,8 @@ To keep microservices lightweight, external infrastructure dependencies are left
 | `npm run dev`             | Start development server with hot-reload (`tsx watch`) |
 | `npm run build`           | Bundle application into `./dist` using `tsup`          |
 | `npm start`               | Run production build (`node dist/server.js`)           |
-| `npm test`                | Run integration test suite using Jest                  |
-| `npm run test:watch`      | Run Jest in watch mode                                 |
+| `npm test`                | Run integration test suite using Vitest                |
+| `npm run test:watch`      | Run Vitest in watch mode                               |
 | `npm run typecheck`       | Check TypeScript types (`tsc --noEmit`)                |
 | `npm run lint`            | Lint codebase using ESLint 9+ flat config              |
 | `npm run format`          | Format entire repository using Prettier                |
@@ -327,7 +327,7 @@ Detect logic errors, dead code, and unused variables before runtime with ESLint 
 npm run lint
 ```
 
-### 4. Automated Testing (`jest.config.cjs`)
+### 4. Automated Testing (`vitest.config.ts`)
 
 Run fast, in-memory integration tests with Fastify's native `app.inject()`:
 

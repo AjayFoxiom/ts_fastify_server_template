@@ -1,8 +1,23 @@
 import { z } from "zod";
+import {
+  paginationQuerySchema,
+  idParamSchema,
+  createResponseSchema,
+  createPaginatedResponseSchema,
+  messageResponseSchema,
+  errorResponseSchema,
+} from "../../common/schemas.js";
+
+// Re-export shared schemas so routes don't need two imports
+export { messageResponseSchema, errorResponseSchema };
 
 export const createUserSchema = z.object({
   email: z.string().email("Invalid email address"),
-  password: z.string().min(8, "Password must be at least 8 characters long"),
+  /** bcrypt silently truncates at 72 bytes; max(72) rejects inputs that would be silently weakened. */
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters long")
+    .max(72, "Password must be at most 72 characters (bcrypt limit)"),
   name: z.string().min(1, "Name cannot be empty").optional(),
 });
 
@@ -11,65 +26,30 @@ export const updateUserSchema = z.object({
   name: z.string().min(1, "Name cannot be empty").optional(),
 });
 
-export const userParamsSchema = z.object({
-  id: z.string().uuid("Invalid user ID (must be a valid UUID)"),
+/** Reuse the shared UUID param schema */
+export const userParamsSchema = idParamSchema;
+
+/**
+ * Reuse the shared pagination schema but restrict sortBy to safe fields.
+ * Open sortBy lets clients sort by `password`, turning the hash into a timing oracle.
+ */
+export const userQuerySchema = paginationQuerySchema.extend({
+  sortBy: z.enum(["name", "email", "createdAt", "updatedAt"]).optional(),
 });
 
-export const userQuerySchema = z.object({
-  page: z.coerce.number().int().positive().default(1),
-  limit: z.coerce.number().int().positive().max(100).default(10),
-  search: z.string().optional(),
-  query: z.string().optional(),
-  sortBy: z.string().optional(),
-  sortOrder: z.enum(["asc", "desc"]).default("desc"),
-});
-
+/** Public-facing user shape — password is intentionally omitted. */
 export const userResponseSchema = z.object({
   id: z.string(),
   email: z.string(),
   name: z.string().nullable(),
+  role: z.enum(["USER", "ADMIN"]),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 });
 
-export const paginationMetaSchema = z.object({
-  totalDocs: z.number(),
-  limit: z.number(),
-  page: z.number(),
-  totalPages: z.number(),
-  hasNextPage: z.boolean(),
-  hasPreviousPage: z.boolean(),
-});
-
-export const singleUserResponseSchema = z.object({
-  success: z.literal(true),
-  statusCode: z.number(),
-  message: z.string(),
-  data: userResponseSchema,
-});
-
-export const userListResponseSchema = z.object({
-  success: z.literal(true),
-  statusCode: z.number(),
-  message: z.string(),
-  data: z.array(userResponseSchema),
-  pagination: paginationMetaSchema,
-});
-
-export const messageResponseSchema = z.object({
-  success: z.literal(true),
-  statusCode: z.number(),
-  message: z.string(),
-  data: z.any().optional(),
-});
-
-export const errorResponseSchema = z.object({
-  success: z.boolean().default(false),
-  statusCode: z.number(),
-  message: z.string(),
-  error: z.string(),
-  errors: z.array(z.any()).optional(),
-});
+/** Reuse the shared response factories */
+export const singleUserResponseSchema = createResponseSchema(userResponseSchema, "User retrieved");
+export const userListResponseSchema = createPaginatedResponseSchema(userResponseSchema, "Users retrieved");
 
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;

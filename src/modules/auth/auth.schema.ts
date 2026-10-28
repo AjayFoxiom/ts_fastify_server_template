@@ -3,16 +3,21 @@ import { userResponseSchema } from "../user/user.schema.js";
 import { createResponseSchema } from "../../common/schemas.js";
 
 export const registerSchema = z.object({
-  email: z.string().email("Invalid email address"),
+  /** Lowercased before DB write to prevent case-sensitive duplicate accounts. */
+  email: z.string().email("Invalid email address").toLowerCase(),
+  /**
+   * bcrypt silently truncates at 72 bytes.
+   * max(72) rejects inputs that would be silently weakened.
+   */
   password: z
     .string()
     .min(8, "Password must be at least 8 characters long")
-    .max(100, "Password is too long"),
+    .max(72, "Password must be at most 72 characters (bcrypt limit)"),
   name: z.string().min(1, "Name cannot be empty").optional(),
 });
 
 export const loginSchema = z.object({
-  email: z.string().email("Invalid email address"),
+  email: z.string().email("Invalid email address").toLowerCase(),
   password: z.string().min(1, "Password is required"),
 });
 

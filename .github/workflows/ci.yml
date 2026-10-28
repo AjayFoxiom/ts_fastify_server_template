@@ -11,9 +11,25 @@ jobs:
     name: Build & Test
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     env:
       NODE_ENV: test
       JWT_ACCESS_SECRET: test_jwt_access_secret_super_secure_32_chars!
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
 
     steps:
       - name: Checkout repository
@@ -31,13 +47,16 @@ jobs:
       - name: Generate Prisma Client
         run: npm run prisma:generate
 
+      - name: Check formatting
+        run: npx prettier --check .
+
       - name: Check types
         run: npm run typecheck
 
       - name: Run linter
         run: npm run lint
 
-      - name: Run Jest tests
+      - name: Run tests
         run: npm test
 
       - name: Build production bundle

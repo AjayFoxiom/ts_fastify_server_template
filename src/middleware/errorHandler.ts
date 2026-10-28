@@ -2,7 +2,6 @@ import { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from "fas
 import { hasZodFastifySchemaValidationErrors } from "fastify-type-provider-zod";
 import { AppError } from "../utils/AppError.js";
 import { sendError } from "../utils/responseHandler.js";
-import { env } from "../config/env.js";
 
 const getErrorNameByStatus = (statusCode: number): string => {
   switch (statusCode) {
@@ -27,7 +26,7 @@ const getErrorNameByStatus = (statusCode: number): string => {
 
 export const globalErrorHandler = (
   error: FastifyError | AppError | Error,
-  _request: FastifyRequest,
+  request: FastifyRequest,
   reply: FastifyReply,
 ) => {
   // 1. Zod / Fastify Schema Validation Errors
@@ -44,24 +43,14 @@ export const globalErrorHandler = (
 
   // 2. Custom Operational AppError
   if (error instanceof AppError) {
-    return sendError(
-      reply,
-      error.message,
-      error.statusCode,
-      getErrorNameByStatus(error.statusCode),
-    );
+    return sendError(reply, error.message, error.statusCode, getErrorNameByStatus(error.statusCode));
   }
 
   // 3. Prisma Known Request Errors
   const anyError = error as any;
   if (anyError?.code === "P2002") {
     const targetFields = anyError.meta?.target ? ` on field: ${anyError.meta.target}` : "";
-    return sendError(
-      reply,
-      `A unique constraint violation occurred${targetFields}`,
-      409,
-      "Conflict",
-    );
+    return sendError(reply, `A unique constraint violation occurred${targetFields}`, 409, "Conflict");
   }
 
   if (anyError?.code === "P2025") {
@@ -72,8 +61,10 @@ export const globalErrorHandler = (
   const statusCode = (error as FastifyError).statusCode ?? 500;
   reply.log.error({ err: error });
 
+  // Read NODE_ENV from app.config — the single source of truth.
+  const isProduction = request.server.config?.NODE_ENV === "production";
   const message =
-    statusCode === 500 && env.NODE_ENV === "production"
+    statusCode === 500 && isProduction
       ? "An unexpected internal server error occurred"
       : error.message || "Internal Server Error";
 

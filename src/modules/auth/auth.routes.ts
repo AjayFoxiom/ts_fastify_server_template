@@ -7,7 +7,8 @@ import { errorResponseSchema } from "../../common/schemas.js";
 
 export const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const userRepository = new UserRepository(fastify.prisma);
-  const authService = new AuthService(userRepository);
+  // Pass the fastify instance so AuthService can read JWT config from app.config.
+  const authService = new AuthService(userRepository, fastify);
   const authController = new AuthController(authService);
 
   fastify.post(
@@ -17,6 +18,7 @@ export const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Auth"],
         summary: "Register new user",
         description: "Registers a new user and returns access token",
+        security: [],
         body: registerSchema,
         response: {
           201: authResponseSchema,
@@ -35,6 +37,7 @@ export const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Auth"],
         summary: "User login",
         description: "Authenticates user credentials and returns access token",
+        security: [],
         body: loginSchema,
         response: {
           200: authResponseSchema,

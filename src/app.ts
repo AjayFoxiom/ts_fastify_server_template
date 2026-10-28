@@ -1,3 +1,4 @@
+import "dotenv/config";
 import Fastify, { FastifyInstance, FastifyServerOptions } from "fastify";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
@@ -6,7 +7,7 @@ import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
 import { serializerCompiler, validatorCompiler, ZodTypeProvider } from "fastify-type-provider-zod";
 
-import { env, Env } from "./config/env.js";
+import { loadEnv, Env } from "./config/env.js";
 import prismaPlugin from "./plugins/prisma.js";
 import swaggerPlugin from "./plugins/swagger.js";
 import registerRoutes from "./routes/index.js";
@@ -14,58 +15,70 @@ import setupErrorHandler from "./middleware/errorHandler.js";
 
 export interface AppOptions {
   logger?: FastifyServerOptions["logger"];
-  trustProxy?: boolean;
-  configOverride?: Partial<Env>;
+  /** Partial env overrides (used in integration tests to inject DATABASE_URL, JWT secret, etc.) */
+  config?: Partial<Record<string, unknown>>;
+  /** Optionally inject a pre-built Prisma client (for unit tests). */
+  prisma?: Parameters<typeof prismaPlugin>[0] extends infer P ? P : never;
 }
 
 export const buildApp = async (opts: AppOptions = {}): Promise<FastifyInstance> => {
-  const currentEnv = { ...env, ...opts.configOverride };
+  // ── Single config source ──────────────────────────────────────────────────
+  // Merging opts.config BEFORE parsing ensures the override goes through Zod
+  // validation and coercion, so DATABASE_URL, JWT secret, etc. set in a test
+  // actually reach every plugin that reads app.config.
+  const config = loadEnv({ ...process.env, ...opts.config });
+
+  // ── Fastify instance ──────────────────────────────────────────────────────
+  // trustProxy: numeric hop count (0 = off). Fastify's TS types don't accept
+  // a raw number, so we use a function that implements the same hop-count logic.
+  // 0 hops → false; N hops → trust N IPs from the right of X-Forwarded-For.
+  const trustProxyFn =
+    config.TRUST_PROXY === 0
+      ? false
+      : (_addr: string, hopIndex: number) => hopIndex < config.TRUST_PROXY;
 
   const app = Fastify({
-    trustProxy: opts.trustProxy ?? currentEnv.TRUST_PROXY,
+    trustProxy: trustProxyFn,
     logger:
       opts.logger !== undefined
         ? opts.logger
         : {
-            level: currentEnv.LOG_LEVEL,
+            level: config.LOG_LEVEL,
             transport:
-              currentEnv.NODE_ENV === "development"
-                ? {
-                    target: "pino/file",
-                  }
+              config.NODE_ENV === "development"
+                ? { target: "pino/file" }
                 : undefined,
+            redact: ["req.headers.authorization"],
           },
   }).withTypeProvider<ZodTypeProvider>();
 
-  // Set Zod validation and serialization compilers
+  // ── Compilers ─────────────────────────────────────────────────────────────
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
 
-  // Global Error Handler setup (registered early before plugins/routes)
+  // ── Decorate config first — every plugin can now read app.config ──────────
+  app.decorate("config", config);
+
+  // ── Error handler (registered early, before plugins/routes) ───────────────
   setupErrorHandler(app);
 
-  // Security Headers
+  // ── Security plugins ──────────────────────────────────────────────────────
   await app.register(helmet, {
-    contentSecurityPolicy: currentEnv.NODE_ENV === "production" ? undefined : false,
+    contentSecurityPolicy: config.NODE_ENV === "production" ? undefined : false,
   });
 
-  // Strict CORS in Production
   const corsOrigin =
-    currentEnv.NODE_ENV === "production" && currentEnv.CORS_ORIGIN === "*"
-      ? false // In production, open wildcard is disabled unless explicit domains are specified
-      : currentEnv.CORS_ORIGIN === "*"
+    config.NODE_ENV === "production" && config.CORS_ORIGIN === "*"
+      ? false
+      : config.CORS_ORIGIN === "*"
         ? true
-        : currentEnv.CORS_ORIGIN.split(",").map((s) => s.trim());
+        : config.CORS_ORIGIN.split(",").map((s) => s.trim());
 
-  await app.register(cors, {
-    origin: corsOrigin,
-    credentials: true,
-  });
+  await app.register(cors, { origin: corsOrigin, credentials: true });
 
-  // Rate Limiting
   await app.register(rateLimit, {
-    max: currentEnv.RATE_LIMIT_MAX,
-    timeWindow: currentEnv.RATE_LIMIT_TIME_WINDOW,
+    max: config.RATE_LIMIT_MAX,
+    timeWindow: config.RATE_LIMIT_TIME_WINDOW,
     errorResponseBuilder: (_req, context) => ({
       success: false,
       statusCode: 429,
@@ -76,21 +89,17 @@ export const buildApp = async (opts: AppOptions = {}): Promise<FastifyInstance> 
 
   await app.register(sensible);
 
-  // Multipart form data & file uploads
   await app.register(multipart, {
-    limits: {
-      fileSize: 15 * 1024 * 1024, // 15MB limit
-    },
+    limits: { fileSize: 15 * 1024 * 1024 },
   });
 
-  // Documentation & Database plugins
+  // ── Infrastructure plugins ────────────────────────────────────────────────
   await app.register(swaggerPlugin);
   await app.register(prismaPlugin);
 
-  // Register all application routes with /api prefix
+  // ── Routes ────────────────────────────────────────────────────────────────
   await app.register(registerRoutes, { prefix: "/api" });
 
-  // Root health probe convenience route
   app.get("/health", async (_request, reply) => reply.redirect("/api/health"));
 
   return app;

@@ -1,62 +1,66 @@
 import { FastifyReply, FastifyRequest } from "fastify";
-import jwt, { JwtPayload, SignOptions } from "jsonwebtoken";
-import { User } from "@prisma/client";
+import jwt, { SignOptions } from "jsonwebtoken";
 import { AppError } from "./AppError.js";
-import { env } from "../config/env.js";
+import { AuthUser } from "../types/fastify.js";
 
-declare module "fastify" {
-  interface FastifyRequest {
-    user?: User;
-  }
-}
+// Re-export AuthUser for callers that imported from here previously.
+export type { AuthUser };
 
-export interface TokenPayload extends JwtPayload {
+export interface TokenPayload {
   id: string;
-  email?: string;
+  email: string;
+  role: "USER" | "ADMIN";
+  iat?: number;
+  exp?: number;
 }
 
 /**
- * Sign a new JWT token
+ * Sign a new JWT access token.
+ * Reads the secret from `app.config` via the Fastify instance so test overrides work.
  */
 export const signToken = (
-  payload: { id: string; email?: string },
+  fastify: { config: { JWT_ACCESS_SECRET: string; JWT_EXPIRES_IN: string } },
+  payload: Omit<TokenPayload, "iat" | "exp">,
   options?: SignOptions,
 ): string => {
-  return jwt.sign(payload, env.JWT_ACCESS_SECRET, {
-    expiresIn: (env.JWT_EXPIRES_IN || "7d") as SignOptions["expiresIn"],
+  return jwt.sign(payload, fastify.config.JWT_ACCESS_SECRET, {
+    algorithm: "HS256",
+    expiresIn: fastify.config.JWT_EXPIRES_IN as SignOptions["expiresIn"],
     ...options,
   });
 };
 
 /**
- * Verify and decode JWT token
+ * Verify and decode a JWT token.
+ * Algorithm is explicitly pinned to HS256 to prevent algorithm-confusion attacks.
  */
-export const verifyToken = (token: string): TokenPayload => {
-  return jwt.verify(token, env.JWT_ACCESS_SECRET) as TokenPayload;
+export const verifyToken = (token: string, secret: string): TokenPayload => {
+  return jwt.verify(token, secret, { algorithms: ["HS256"] }) as TokenPayload;
 };
 
 /**
- * Authentication preHandler hook for Fastify routes
- * Usage:
- *   fastify.get('/protected', { preHandler: [authToken] }, handler)
+ * `onRequest` authentication hook for Fastify routes.
+ *
+ * Registered via `addHook("onRequest", app.authenticate)` on protected scopes.
+ * Using onRequest (not preHandler) ensures unauthenticated requests are rejected
+ * BEFORE body parsing and validation, so anonymous requests with bad bodies
+ * get 401 instead of 400.
  */
 export const authToken = async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
-  // 1) Extract Bearer token from authorization header
   const authHeader = request.headers.authorization;
   let token: string | undefined;
 
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    token = authHeader.split(" ")[1];
+  if (authHeader?.startsWith("Bearer ")) {
+    token = authHeader.slice(7);
   }
 
   if (!token) {
-    throw new AppError("You are not logged in! Please provide a bearer token to get access.", 401);
+    throw new AppError("You are not logged in! Please provide a Bearer token to get access.", 401);
   }
 
-  // 2) Verify token
   let decoded: TokenPayload;
   try {
-    decoded = verifyToken(token);
+    decoded = verifyToken(token, request.server.config.JWT_ACCESS_SECRET);
   } catch (err) {
     if (err instanceof jwt.TokenExpiredError) {
       throw new AppError("Your token has expired! Please log in again.", 401);
@@ -64,45 +68,24 @@ export const authToken = async (request: FastifyRequest, _reply: FastifyReply): 
     throw new AppError("Invalid authentication token.", 401);
   }
 
-  // 3) Check if user exists in the database
+  // Fetch a slim projection — never load the password hash into request context.
   const currentUser = await request.server.prisma.user.findUnique({
     where: { id: decoded.id },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      role: true,
+      createdAt: true,
+      updatedAt: true,
+    },
   });
 
   if (!currentUser) {
     throw new AppError("The user belonging to this token no longer exists.", 401);
   }
 
-  // 4) Attach user to request
-  request.user = currentUser;
-};
-
-/**
- * Optional authentication hook - attaches user if valid token exists, doesn't throw if missing
- */
-export const optionalAuthToken = async (
-  request: FastifyRequest,
-  _reply: FastifyReply,
-): Promise<void> => {
-  const authHeader = request.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return;
-  }
-
-  const token = authHeader.split(" ")[1];
-  if (!token) return;
-
-  try {
-    const decoded = verifyToken(token);
-    const currentUser = await request.server.prisma.user.findUnique({
-      where: { id: decoded.id },
-    });
-    if (currentUser) {
-      request.user = currentUser;
-    }
-  } catch {
-    // Silently ignore if token is optional
-  }
+  request.user = currentUser as AuthUser;
 };
 
 export default authToken;

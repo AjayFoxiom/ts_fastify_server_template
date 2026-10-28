@@ -1,14 +1,12 @@
-import { describe, it, expect, beforeAll, afterAll } from "@jest/globals";
-import { FastifyInstance } from "fastify";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app.js";
 
 describe("Server Integration Tests", () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
-    app = await buildApp({
-      logger: false,
-    });
+    app = await buildApp({ logger: false });
     await app.ready();
   });
 

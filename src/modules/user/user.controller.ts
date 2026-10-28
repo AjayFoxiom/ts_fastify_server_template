@@ -7,6 +7,7 @@ import {
   UserQueryInput,
 } from "./user.schema.js";
 import { sendSuccess, sendCreated, sendPaginated } from "../../utils/responseHandler.js";
+import { AppError } from "../../utils/AppError.js";
 
 export class UserController {
   constructor(private readonly userService: UserService) {}
@@ -33,13 +34,12 @@ export class UserController {
   };
 
   updateUser = async (
-    request: FastifyRequest<{
-      Params: UserParamsInput;
-      Body: UpdateUserInput;
-    }>,
+    request: FastifyRequest<{ Params: UserParamsInput; Body: UpdateUserInput }>,
     reply: FastifyReply,
   ) => {
-    const updatedUser = await this.userService.update(request.params.id, request.body);
+    const actor = request.user;
+    if (!actor) throw new AppError("Unauthorized", 401);
+    const updatedUser = await this.userService.update(actor, request.params.id, request.body);
     return sendSuccess(reply, updatedUser, "User updated successfully");
   };
 
@@ -47,7 +47,9 @@ export class UserController {
     request: FastifyRequest<{ Params: UserParamsInput }>,
     reply: FastifyReply,
   ) => {
-    await this.userService.delete(request.params.id);
+    const actor = request.user;
+    if (!actor) throw new AppError("Unauthorized", 401);
+    await this.userService.delete(actor, request.params.id);
     return sendSuccess(reply, null, "User deleted successfully");
   };
 }

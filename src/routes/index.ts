@@ -2,12 +2,21 @@ import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { authRoutes } from "../modules/auth/auth.routes.js";
 import { userRoutes } from "../modules/user/user.routes.js";
-import { saveUploadedFile } from "../utils/uploads.js";
+import { saveUploadedFile, validateFileType } from "../utils/uploads.js";
 import { AppError } from "../utils/AppError.js";
 import { authToken } from "../utils/authToken.js";
 import { sendSuccess, sendCreated, sendError } from "../utils/responseHandler.js";
 
-// Standard health response schema
+// ── Allowed MIME types for uploads ────────────────────────────────────────
+const ALLOWED_UPLOAD_MIMES = [
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+  "application/pdf",
+];
+
+// ── Inline response schemas ───────────────────────────────────────────────
 const healthResponseSchema = z.object({
   success: z.literal(true),
   statusCode: z.number(),
@@ -20,7 +29,6 @@ const healthResponseSchema = z.object({
   }),
 });
 
-// Standard readiness response schema
 const readinessResponseSchema = z.object({
   success: z.boolean(),
   statusCode: z.number(),
@@ -33,7 +41,6 @@ const readinessResponseSchema = z.object({
     .optional(),
 });
 
-// Standard upload response schema
 const uploadResponseSchema = z.object({
   success: z.literal(true),
   statusCode: z.number(),
@@ -49,11 +56,12 @@ const uploadResponseSchema = z.object({
 });
 
 export const registerRoutes = async (app: FastifyInstance): Promise<void> => {
-  // ==========================================
-  // 1. PUBLIC SCOPE (No authentication required)
-  // ==========================================
+  // Decorate app.authenticate so it reads app.config at call time (not import time).
+  // This is the onRequest hook used by the protected scope.
+  app.decorate("authenticate", authToken);
+
+  // ── PUBLIC SCOPE ─────────────────────────────────────────────────────────
   await app.register(async (publicScope) => {
-    // Health & Readiness Probes
     publicScope.get(
       "/health",
       {
@@ -61,9 +69,9 @@ export const registerRoutes = async (app: FastifyInstance): Promise<void> => {
           tags: ["Health"],
           summary: "Liveness probe",
           description: "Returns process health, uptime, and current timestamp",
-          response: {
-            200: healthResponseSchema,
-          },
+          // Public endpoint — opt out of global bearerAuth requirement in Swagger UI
+          security: [],
+          response: { 200: healthResponseSchema },
         },
       },
       async (_request, reply) => {
@@ -73,7 +81,7 @@ export const registerRoutes = async (app: FastifyInstance): Promise<void> => {
             status: "ok" as const,
             uptime: process.uptime(),
             timestamp: new Date().toISOString(),
-            environment: process.env.NODE_ENV || "development",
+            environment: process.env.NODE_ENV ?? "development",
           },
           "Server is healthy",
         );
@@ -87,10 +95,8 @@ export const registerRoutes = async (app: FastifyInstance): Promise<void> => {
           tags: ["Health"],
           summary: "Readiness probe",
           description: "Checks database connectivity to determine readiness",
-          response: {
-            200: readinessResponseSchema,
-            503: readinessResponseSchema,
-          },
+          security: [],
+          response: { 200: readinessResponseSchema, 503: readinessResponseSchema },
         },
       },
       async (_request, reply) => {
@@ -98,10 +104,7 @@ export const registerRoutes = async (app: FastifyInstance): Promise<void> => {
           await app.prisma.$queryRaw`SELECT 1`;
           return sendSuccess(
             reply,
-            {
-              database: "connected" as const,
-              timestamp: new Date().toISOString(),
-            },
+            { database: "connected" as const, timestamp: new Date().toISOString() },
             "Database connection is ready",
           );
         } catch (error) {
@@ -111,21 +114,18 @@ export const registerRoutes = async (app: FastifyInstance): Promise<void> => {
       },
     );
 
-    // Public Auth endpoints (/api/auth/register, /api/auth/login)
     await publicScope.register(authRoutes, { prefix: "/auth" });
   });
 
-  // ==========================================================
-  // 2. PROTECTED SCOPE (Private by default for all new modules)
-  // ==========================================================
+  // ── PROTECTED SCOPE ───────────────────────────────────────────────────────
+  // onRequest runs BEFORE body parsing and Zod validation.
+  // Anonymous requests with malformed bodies get 401, not 400.
   await app.register(async (protectedScope) => {
-    // Encapsulated preHandler applies authentication to every route in this scope
-    protectedScope.addHook("preHandler", authToken);
+    protectedScope.addHook("onRequest", app.authenticate);
 
-    // Protected User endpoints (/api/users)
     await protectedScope.register(userRoutes, { prefix: "/users" });
 
-    // Protected Uploads endpoint (/api/uploads)
+    // Upload endpoint — validates MIME type and cleans up partial files on abort
     protectedScope.post(
       "/uploads",
       {
@@ -133,9 +133,7 @@ export const registerRoutes = async (app: FastifyInstance): Promise<void> => {
           tags: ["Uploads"],
           summary: "Upload a single file",
           description: "Uploads a multipart form file to disk (Authenticated)",
-          response: {
-            201: uploadResponseSchema,
-          },
+          response: { 201: uploadResponseSchema },
         },
       },
       async (request, reply) => {
@@ -144,14 +142,13 @@ export const registerRoutes = async (app: FastifyInstance): Promise<void> => {
           throw new AppError("No file was provided in the request", 400);
         }
 
+        // Validate MIME type before streaming to disk
+        validateFileType(fileData, ALLOWED_UPLOAD_MIMES);
+
         const savedFile = await saveUploadedFile(fileData);
         return sendCreated(reply, savedFile, "File uploaded successfully");
       },
     );
-
-    // NOTE: Any new module registered inside this protected scope
-    // (e.g. protectedScope.register(orderRoutes, { prefix: "/orders" }))
-    // is AUTOMATICALLY private by default!
   });
 };
 
