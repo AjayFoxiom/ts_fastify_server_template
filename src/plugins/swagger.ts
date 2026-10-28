@@ -9,8 +9,8 @@ const swaggerPlugin: FastifyPluginAsync = async (fastify) => {
   await fastify.register(fastifySwagger, {
     openapi: {
       info: {
-        title: "Fastify TypeScript Server API",
-        description: "Production-ready Fastify REST API with Prisma, PostgreSQL, and Zod",
+        title: `${env.APP_NAME} API`,
+        description: `Production-ready REST API powered by ${env.APP_NAME}`,
         version: "1.0.0",
       },
       servers: [
@@ -19,8 +19,19 @@ const swaggerPlugin: FastifyPluginAsync = async (fastify) => {
           description: "API Server",
         },
       ],
+      components: {
+        securitySchemes: {
+          bearerAuth: {
+            type: "http",
+            scheme: "bearer",
+            bearerFormat: "JWT",
+            description: "Enter your Bearer token in the format: Bearer <token>",
+          },
+        },
+      },
       tags: [
         { name: "Health", description: "Health check and system status endpoints" },
+        { name: "Auth", description: "Authentication endpoints (register, login)" },
         { name: "Users", description: "User management operations" },
         { name: "Uploads", description: "File upload operations" },
       ],

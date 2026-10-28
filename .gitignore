@@ -3,6 +3,10 @@ node_modules/
 
 # Production build output
 dist/
+coverage/
+
+# Uploaded assets
+uploads/
 
 # Environment variables
 .env

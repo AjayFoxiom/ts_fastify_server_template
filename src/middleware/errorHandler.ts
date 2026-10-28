@@ -28,7 +28,7 @@ const getErrorNameByStatus = (statusCode: number): string => {
 export const globalErrorHandler = (
   error: FastifyError | AppError | Error,
   _request: FastifyRequest,
-  reply: FastifyReply
+  reply: FastifyReply,
 ) => {
   // 1. Zod / Fastify Schema Validation Errors
   if (hasZodFastifySchemaValidationErrors(error as FastifyError)) {
@@ -38,7 +38,7 @@ export const globalErrorHandler = (
       fastifyErr.message || "Validation failed",
       400,
       "Bad Request",
-      fastifyErr.validation
+      fastifyErr.validation,
     );
   }
 
@@ -48,7 +48,7 @@ export const globalErrorHandler = (
       reply,
       error.message,
       error.statusCode,
-      getErrorNameByStatus(error.statusCode)
+      getErrorNameByStatus(error.statusCode),
     );
   }
 
@@ -60,34 +60,24 @@ export const globalErrorHandler = (
       reply,
       `A unique constraint violation occurred${targetFields}`,
       409,
-      "Conflict"
+      "Conflict",
     );
   }
 
   if (anyError?.code === "P2025") {
-    return sendError(
-      reply,
-      "The requested record was not found",
-      404,
-      "Not Found"
-    );
+    return sendError(reply, "The requested record was not found", 404, "Not Found");
   }
 
   // 4. Fastify and Internal Server Errors
   const statusCode = (error as FastifyError).statusCode ?? 500;
-  reply.log.error(error);
+  reply.log.error({ err: error });
 
   const message =
     statusCode === 500 && env.NODE_ENV === "production"
       ? "An unexpected internal server error occurred"
       : error.message || "Internal Server Error";
 
-  return sendError(
-    reply,
-    message,
-    statusCode,
-    error.name || getErrorNameByStatus(statusCode)
-  );
+  return sendError(reply, message, statusCode, error.name || getErrorNameByStatus(statusCode));
 };
 
 export function setupErrorHandler(app: FastifyInstance): void {

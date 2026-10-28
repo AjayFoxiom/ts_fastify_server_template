@@ -21,6 +21,7 @@ export interface FetchDataOptions<TWhere = any, TOrderBy = any, TSelect = any, T
   selectOptions?: TSelect;
   populate?: TInclude; // Prisma include relations
   searchFields?: string[]; // Array of string column names to search across
+  allowedSortFields?: string[]; // Allowed column names to sort by
 }
 
 export interface PaginationResult<T> {
@@ -35,19 +36,11 @@ export interface PaginationResult<T> {
 
 /**
  * Universal pagination, filtering, and search utility for Prisma models.
- * Compatible with Fastify request.query or standalone pagination params.
- *
- * Usage:
- *   const result = await fetchData(fastify.prisma.user, request.query, {
- *     searchFields: ["name", "email"],
- *     condition: { isActive: true },
- *     sort: { createdAt: "desc" },
- *   });
  */
 export async function fetchData<T = any>(
   model: PrismaDelegate<T>,
   queryParams: PaginationParams | FastifyRequest,
-  options: FetchDataOptions = {}
+  options: FetchDataOptions = {},
 ): Promise<PaginationResult<T>> {
   // Extract query params from Fastify request if passed directly
   const query: PaginationParams =
@@ -76,24 +69,26 @@ export async function fetchData<T = any>(
     }));
 
     if (Object.keys(where).length > 0) {
-      where.AND = [
-        options.condition,
-        { OR: searchConditions },
-      ];
+      where.AND = [options.condition, { OR: searchConditions }];
     } else {
       where.OR = searchConditions;
     }
   }
 
-  // Build sorting
-  let orderBy = options.sort;
-  if (!orderBy && query.sortBy) {
-    const sortField = String(query.sortBy);
-    const sortDirection = query.sortOrder === "asc" ? "asc" : "desc";
-    orderBy = { [sortField]: sortDirection };
+  // Active Dynamic Sorting (fixes the dead sortBy bug)
+  let orderBy: any;
+  if (query.sortBy) {
+    const requestedSort = String(query.sortBy).trim();
+    const isAllowed =
+      !options.allowedSortFields || options.allowedSortFields.includes(requestedSort);
+    if (isAllowed) {
+      const direction = query.sortOrder === "asc" ? "asc" : "desc";
+      orderBy = { [requestedSort]: direction };
+    }
   }
+
   if (!orderBy) {
-    orderBy = { createdAt: "desc" };
+    orderBy = options.sort ?? { createdAt: "desc" };
   }
 
   // Execute count and findMany in parallel
@@ -123,5 +118,10 @@ export async function fetchData<T = any>(
     hasPreviousPage,
   };
 }
+
+/**
+ * Type-safe alias for fetchData
+ */
+export const paginate = fetchData;
 
 export default fetchData;

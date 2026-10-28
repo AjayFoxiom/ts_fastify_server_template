@@ -20,7 +20,7 @@ export interface TokenPayload extends JwtPayload {
  */
 export const signToken = (
   payload: { id: string; email?: string },
-  options?: SignOptions
+  options?: SignOptions,
 ): string => {
   return jwt.sign(payload, env.JWT_ACCESS_SECRET, {
     expiresIn: (env.JWT_EXPIRES_IN || "7d") as SignOptions["expiresIn"],
@@ -40,10 +40,7 @@ export const verifyToken = (token: string): TokenPayload => {
  * Usage:
  *   fastify.get('/protected', { preHandler: [authToken] }, handler)
  */
-export const authToken = async (
-  request: FastifyRequest,
-  _reply: FastifyReply
-): Promise<void> => {
+export const authToken = async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
   // 1) Extract Bearer token from authorization header
   const authHeader = request.headers.authorization;
   let token: string | undefined;
@@ -85,7 +82,7 @@ export const authToken = async (
  */
 export const optionalAuthToken = async (
   request: FastifyRequest,
-  _reply: FastifyReply
+  _reply: FastifyReply,
 ): Promise<void> => {
   const authHeader = request.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {

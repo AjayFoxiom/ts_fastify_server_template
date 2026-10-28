@@ -37,7 +37,7 @@ export const sendSuccess = <T = unknown>(
   reply: FastifyReply,
   data?: T,
   message = "Operation completed successfully",
-  statusCode = 200
+  statusCode = 200,
 ): FastifyReply => {
   const payload: ApiSuccessResponse<T> = {
     success: true,
@@ -54,7 +54,7 @@ export const sendSuccess = <T = unknown>(
 export const sendCreated = <T = unknown>(
   reply: FastifyReply,
   data?: T,
-  message = "Resource created successfully"
+  message = "Resource created successfully",
 ): FastifyReply => {
   return sendSuccess(reply, data, message, 201);
 };
@@ -66,7 +66,7 @@ export const sendPaginated = <T = unknown>(
   reply: FastifyReply,
   paginationResult: PaginationResult<T>,
   message = "Data retrieved successfully",
-  statusCode = 200
+  statusCode = 200,
 ): FastifyReply => {
   const { docs, ...pagination } = paginationResult;
 
@@ -89,7 +89,7 @@ export const sendError = (
   message = "An error occurred",
   statusCode = 400,
   error = "Bad Request",
-  errors?: unknown[]
+  errors?: unknown[],
 ): FastifyReply => {
   const payload: ApiErrorResponse = {
     success: false,

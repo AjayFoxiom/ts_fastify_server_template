@@ -31,7 +31,7 @@ const startServer = async () => {
     app.log.info(`📖 Swagger documentation: http://${displayHost}:${env.PORT}/docs`);
     app.log.info(`🩺 Health check: http://${displayHost}:${env.PORT}/api/health`);
   } catch (error) {
-    app.log.fatal({ error }, "Failed to start server");
+    app.log.fatal({ err: error }, "Failed to start server");
     process.exit(1);
   }
 };

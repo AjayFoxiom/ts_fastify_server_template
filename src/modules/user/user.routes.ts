@@ -2,7 +2,6 @@ import { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { UserRepository } from "./user.repository.js";
 import { UserService } from "./user.service.js";
 import { UserController } from "./user.controller.js";
-import { authToken } from "../../utils/authToken.js";
 import {
   createUserSchema,
   updateUserSchema,
@@ -20,15 +19,15 @@ export const userRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const userService = new UserService(userRepository);
   const userController = new UserController(userService);
 
-  // Protected route using authToken preHandler
+  // Get current authenticated user
   fastify.get(
     "/me",
     {
-      preHandler: [authToken],
       schema: {
         tags: ["Users"],
         summary: "Get current authenticated user",
-        description: "Returns the profile of the currently logged-in user from the JWT Bearer token",
+        description:
+          "Returns the profile of the currently logged-in user from the JWT Bearer token",
         response: {
           200: singleUserResponseSchema,
           401: errorResponseSchema,
@@ -37,7 +36,7 @@ export const userRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       return sendSuccess(reply, request.user!, "Profile retrieved successfully");
-    }
+    },
   );
 
   fastify.post(
@@ -55,7 +54,7 @@ export const userRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       },
     },
-    userController.createUser
+    userController.createUser,
   );
 
   fastify.get(
@@ -71,7 +70,7 @@ export const userRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       },
     },
-    userController.getUsers
+    userController.getUsers,
   );
 
   fastify.get(
@@ -88,7 +87,7 @@ export const userRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       },
     },
-    userController.getUserById
+    userController.getUserById,
   );
 
   fastify.patch(
@@ -108,7 +107,7 @@ export const userRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       },
     },
-    userController.updateUser
+    userController.updateUser,
   );
 
   fastify.delete(
@@ -125,6 +124,6 @@ export const userRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       },
     },
-    userController.deleteUser
+    userController.deleteUser,
   );
 };
